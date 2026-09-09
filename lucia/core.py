@@ -9,7 +9,7 @@ from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitiv
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
-from .planner import Plan, Planner, RuleBasedPlanner
+from .planner import CognitivePlanner, Plan, Planner, RuleBasedPlanner
 from .retrieval import MemoryRetriever
 
 
@@ -54,9 +54,21 @@ class LuciaCore:
             "metadata": dict(memory.metadata),
         }
 
+    def _planner(self) -> Planner:
+        """Return a planner configured with the executor's capabilities."""
+        if not isinstance(self.planner, CognitivePlanner):
+            return self.planner
+        if self.action_executor is None:
+            return self.planner
+        return CognitivePlanner(
+            engine=self.planner.engine,
+            max_steps=self.planner.max_steps,
+            allowed_actions=frozenset(self.action_executor.registry.names()),
+        )
+
     def plan(self, context: Context) -> Plan:
         """Produce a transient plan without executing any action."""
-        return self.planner.plan(context)
+        return self._planner().plan(context)
 
     def reason(self, context: Context, *, description: str | None = None) -> dict[str, Any]:
         """Run the configured cognitive engine and store its result in context."""
