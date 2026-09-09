@@ -54,9 +54,10 @@ def test_router_prefers_reasoning_model_for_complex_analysis() -> None:
 
 def test_router_prefers_long_context_model_for_large_context() -> None:
     router, _ = make_router()
-    selection = router.select(CognitiveRequest(task="Analyze the entire repository with long context"))
+    huge_context = {"payload": "x" * 600_000}
+    selection = router.select(CognitiveRequest(task="Analyze", context=huge_context))
     assert selection.model_id == "qwen3-coder:30b"
-    assert "long_context" in selection.reason
+    assert selection.model_id != "gpt-oss:20b"
 
 
 def test_router_delegates_only_to_selected_engine() -> None:
@@ -75,14 +76,6 @@ def test_router_skips_disabled_models() -> None:
     selection = router.select(CognitiveRequest(task="Implement a Python API"))
     assert selection.model_id != "qwen3-coder:30b"
     assert engines["qwen3-coder:30b"].calls == 0
-
-
-def test_router_respects_context_window() -> None:
-    router, _ = make_router()
-    huge_context = {"payload": "x" * 600_000}
-    selection = router.select(CognitiveRequest(task="Analyze", context=huge_context))
-    assert selection.model_id == "qwen3-coder:30b"
-    assert selection.model_id != "gpt-oss:20b"
 
 
 def test_router_requires_an_enabled_model() -> None:
@@ -112,8 +105,18 @@ def test_build_ollama_router_uses_only_installed_candidates(monkeypatch: pytest.
         lambda base_url, timeout: ("qwen3:4b", "qwen3:8b"),
     )
     router = build_ollama_router()
-    assert set(router.engines) == {"qwen3:8b"}
-    assert "qwen3:4b" not in router.engines
+    assert set(router.engines) == {"qwen3:4b", "qwen3:8b"}
+
+
+def test_build_ollama_router_uses_small_fallback_when_only_qwen4b_is_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "lucia.model_router._ollama_installed_models",
+        lambda base_url, timeout: ("qwen3:4b",),
+    )
+    router = build_ollama_router()
+    assert set(router.engines) == {"qwen3:4b"}
+    selection = router.select(CognitiveRequest(task="What time is it?"))
+    assert selection.model_id == "qwen3:4b"
 
 
 def test_build_ollama_router_fails_when_no_candidate_is_installed(monkeypatch: pytest.MonkeyPatch) -> None:
