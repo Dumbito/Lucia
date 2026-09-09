@@ -30,7 +30,28 @@ if __name__ == "__main__":
             initiative_engine=InitiativeEngine(threshold=0.5),
         )
 
-        source = LinuxEventSource()
+        linux_source = LinuxEventSource()
+
+        def source():
+            """Add explicit task context without fabricating the Linux state."""
+            events = []
+            for event in linux_source():
+                data = dict(event.data)
+                data["content"] = (
+                    "Evaluar el estado actual del sistema y actuar si es necesario. "
+                    f"Ventana activa: {data.get('active_window')!r}. "
+                    f"Media: {data.get('music_status')!r}."
+                )
+                events.append(
+                    event.__class__(
+                        type=event.type,
+                        data=data,
+                        timestamp=event.timestamp,
+                        source=event.source,
+                    )
+                )
+            return events
+
         loop = ProactiveLoop(
             core,
             source,
