@@ -7,9 +7,11 @@ import time
 
 from .attention_adapter import AttentionAdapter
 from .context import Context
+from .events import Event
+from .memory import Memory
 from .memory_gate import MemoryGate
-from .storage import SQLiteMemoryStore
 from .perception import LinuxPerception, SystemSnapshot
+from .storage import SQLiteMemoryStore
 
 
 def main() -> None:
@@ -81,9 +83,7 @@ def main() -> None:
 
                     if memory_gate.should_remember(event, salience):
                         fields = memory_gate.to_memory_fields(event, salience)
-                        memory_store.save(
-                            __import__("lucia.memory", fromlist=["Memory"]).Memory(**fields)
-                        )
+                        memory_store.save(Memory(**fields))
                         memories_saved += 1
                         print(
                             f"  MEMORY: guardado como {fields['kind']} "
