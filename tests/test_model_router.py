@@ -33,45 +33,35 @@ def make_router() -> tuple[ModelRouter, dict[str, FakeEngine]]:
 
 def test_router_prefers_fast_model_for_simple_request() -> None:
     router, _ = make_router()
-
     selection = router.select(CognitiveRequest(task="What time is it?"))
-
     assert selection.model_id == "qwen3:8b"
     assert "fast" in selection.reason
 
 
 def test_router_prefers_coder_for_coding_request() -> None:
     router, _ = make_router()
-
     selection = router.select(CognitiveRequest(task="Implement a Python API and add tests"))
-
     assert selection.model_id == "qwen3-coder:30b"
     assert "coding" in selection.reason
 
 
 def test_router_prefers_reasoning_model_for_complex_analysis() -> None:
     router, _ = make_router()
-
     selection = router.select(CognitiveRequest(task="Analyze the architecture and compare two strategies"))
-
     assert selection.model_id == "gpt-oss:20b"
     assert "reasoning" in selection.reason
 
 
 def test_router_prefers_long_context_model_for_large_context() -> None:
     router, _ = make_router()
-
     selection = router.select(CognitiveRequest(task="Analyze the entire repository with long context"))
-
     assert selection.model_id == "qwen3-coder:30b"
     assert "long_context" in selection.reason
 
 
 def test_router_delegates_only_to_selected_engine() -> None:
     router, engines = make_router()
-
     result = router.reason(CognitiveRequest(task="Fix this Python bug"))
-
     assert result.success is True
     assert result.engine == "qwen3-coder:30b"
     assert engines["qwen3-coder:30b"].calls == 1
@@ -82,15 +72,20 @@ def test_router_skips_disabled_models() -> None:
     router, engines = make_router()
     profile = router.profiles["qwen3-coder:30b"]
     router.profiles["qwen3-coder:30b"] = replace(profile, enabled=False)
-
     selection = router.select(CognitiveRequest(task="Implement a Python API"))
-
     assert selection.model_id != "qwen3-coder:30b"
     assert engines["qwen3-coder:30b"].calls == 0
 
 
+def test_router_respects_context_window() -> None:
+    router, _ = make_router()
+    huge_context = {"payload": "x" * 140_000}
+    selection = router.select(CognitiveRequest(task="Analyze", context=huge_context))
+    assert selection.model_id == "qwen3-coder:30b"
+    assert selection.model_id != "qwen3:8b"
+
+
 def test_router_requires_an_enabled_model() -> None:
     router = ModelRouter()
-
     with pytest.raises(RuntimeError, match="No enabled cognitive models"):
         router.select(CognitiveRequest(task="hello"))
