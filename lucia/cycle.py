@@ -14,3 +14,8 @@ class CycleResult:
     context: Context
     plan: Plan
     action_results: tuple[dict[str, Any], ...]
+
+    @property
+    def evaluations(self) -> tuple[dict[str, Any], ...]:
+        """Return evaluations produced during the cycle."""
+        return tuple(self.context.evaluations)
