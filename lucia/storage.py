@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 
 from .memory import Memory, MemoryStore
@@ -101,7 +102,7 @@ class SQLiteMemoryStore(MemoryStore):
                 kind=row["kind"],
                 importance=row["importance"],
                 confidence=row["confidence"],
-                created_at=__import__("datetime").datetime.fromisoformat(row["created_at"]),
+                created_at=datetime.fromisoformat(row["created_at"]),
                 metadata=json.loads(row["metadata"]),
             )
             for _, row in matches[:limit]
