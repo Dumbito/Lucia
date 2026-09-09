@@ -41,7 +41,9 @@ class AttentionEngine:
             + urgency * self.weights.urgency
             + goal_alignment * self.weights.goal_alignment
         )
-        return min(1.0, max(0.0, score))
+        # Floating-point arithmetic can produce values such as
+        # 0.9999999999999999 for an exact mathematical 1.0.
+        return min(1.0, max(0.0, round(score, 12)))
 
     def should_process(self, score: float, threshold: float = 0.5) -> bool:
         """Decide whether an event deserves downstream processing."""
