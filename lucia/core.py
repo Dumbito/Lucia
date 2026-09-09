@@ -4,10 +4,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .actions import Action, ActionExecutor
+from .attention_adapter import AttentionAdapter
 from .context import Context
 from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitive_request
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
+from .events import Event
 from .memory import Memory, MemoryStore
 from .model_router import ModelRouter
 from .planner import CognitivePlanner, Plan, PlanStep, Planner, RuleBasedPlanner
@@ -25,6 +27,7 @@ class LuciaCore:
     action_executor: ActionExecutor | None = None
     evaluator: RuleBasedEvaluator = field(default_factory=RuleBasedEvaluator)
     retriever: MemoryRetriever | None = None
+    attention_adapter: AttentionAdapter | None = None
 
     def observe(self, event: dict[str, Any]) -> Context:
         """Add an observed event to working context."""
@@ -168,6 +171,39 @@ class LuciaCore:
         context = self.observe(event)
         context.active_goal = goal
         context.current_task = task
+        if self.attention_adapter is not None:
+            event_type = str(event.get("type", "observation"))
+            event_data = event.get("data", {})
+            if not isinstance(event_data, dict):
+                event_data = {"content": event_data}
+            normalized_event = Event(
+                type=event_type,
+                data=dict(event_data),
+                source=str(event.get("source", "system")),
+            )
+            salience, process, components = self.attention_adapter.evaluate(
+                normalized_event,
+                active_goal=goal,
+                current_task=task,
+            )
+            context.add_event(
+                {
+                    "type": "attention.result",
+                    "data": {
+                        "salience": salience,
+                        "process": process,
+                        "components": components,
+                    },
+                    "source": "attention",
+                }
+            )
+            if not process:
+                return CycleResult(
+                    context=context,
+                    plan=Plan(goal=goal, task=(task or "").strip(), steps=()),
+                    action_results=(),
+                )
+
         all_action_results: list[dict[str, Any]] = []
         last_plan = Plan(goal=goal, task=(task or "").strip(), steps=())
 
