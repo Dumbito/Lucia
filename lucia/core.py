@@ -5,6 +5,7 @@ from typing import Any
 
 from .actions import Action, ActionExecutor
 from .context import Context
+from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
 from .planner import Plan, Planner, RuleBasedPlanner
 
@@ -17,6 +18,7 @@ class LuciaCore:
     name: str = "Lucía"
     planner: Planner = field(default_factory=RuleBasedPlanner)
     action_executor: ActionExecutor | None = None
+    evaluator: RuleBasedEvaluator = field(default_factory=RuleBasedEvaluator)
 
     def observe(self, event: dict[str, Any]) -> Context:
         """Add an observed event to working context."""
@@ -38,11 +40,10 @@ class LuciaCore:
         """Execute one action through the configured executor."""
         if self.action_executor is None:
             raise RuntimeError("No action executor configured")
-        result = self.action_executor.execute(action)
-        return result
+        return self.action_executor.execute(action)
 
     def execute_plan(self, plan: Plan, context: Context) -> list[dict[str, Any]]:
-        """Execute executable plan steps and append normalized results to context."""
+        """Execute plan steps and evaluate each action result."""
         if self.action_executor is None:
             raise RuntimeError("No action executor configured")
 
@@ -50,10 +51,23 @@ class LuciaCore:
         for step in plan.steps:
             if step.action == "reason":
                 continue
+
             result = self.action_executor.execute(
                 Action(name=step.action, parameters=dict(step.parameters))
             )
             normalized = result.as_dict()
-            results.append(normalized)
-            context.add_event({"type": "action.result", "data": normalized, "source": "action_executor"})
+            evaluation: Evaluation = self.evaluator.evaluate(result)
+            normalized_evaluation = evaluation.as_dict()
+
+            context.add_action_result(normalized)
+            context.add_evaluation(normalized_evaluation)
+            results.append({"result": normalized, "evaluation": normalized_evaluation})
+
+            if evaluation.should_remember:
+                summary = (
+                    f"Action {step.action}: {evaluation.summary} "
+                    f"success={evaluation.success} score={evaluation.score:.2f}"
+                )
+                self.remember(summary, kind="episodic", importance=max(evaluation.score, 0.7))
+
         return results
