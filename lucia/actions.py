@@ -28,6 +28,17 @@ class ActionResult:
     error: str | None = None
     executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def as_dict(self) -> dict[str, Any]:
+        """Serialize the result for context and later memory processing."""
+        return {
+            "action": self.action.name,
+            "parameters": dict(self.action.parameters),
+            "success": self.success,
+            "output": self.output,
+            "error": self.error,
+            "executed_at": self.executed_at.isoformat(),
+        }
+
 
 class Tool(Protocol):
     """Interface implemented by executable Lucía tools."""
