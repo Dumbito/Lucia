@@ -17,15 +17,16 @@ from .memory import Memory, MemoryStore
 class MemoryRetriever:
     """Retrieve persistent memories relevant to the current task.
 
-    With an ``EmbeddingProvider`` this performs true dense semantic retrieval
-    over the complete memory set, so lexical overlap is no longer required.
-    Without one it keeps the dependency-free lexical fallback.
+    Dense embeddings are cached by the storage backend when possible. A cache
+    miss computes the vector once and persists it, so later queries do not
+    re-encode the same memory.
     """
 
     store: MemoryStore
     limit: int = 5
     min_similarity: float = 0.15
     embedding_provider: EmbeddingProvider | None = None
+    embedding_model_name: str | None = None
 
     def retrieve(self, *, goal: str | None = None, task: str | None = None) -> list[Memory]:
         """Rank memories by semantic similarity and importance."""
@@ -39,9 +40,15 @@ class MemoryRetriever:
         query_vector = self.embedding_provider.embed(query)
         candidates = self.store.list_all()
         ranked: list[tuple[float, Memory]] = []
+        model_name = self.embedding_model_name or self.embedding_provider.__class__.__name__
 
         for memory in candidates:
-            similarity = dense_cosine_similarity(query_vector, self.embedding_provider.embed(memory.content))
+            embedding = self.store.get_embedding(memory, model_name)
+            if embedding is None:
+                embedding = self.embedding_provider.embed(memory.content)
+                self.store.save_embedding(memory, model_name, embedding)
+
+            similarity = dense_cosine_similarity(query_vector, embedding)
             if similarity < self.min_similarity:
                 continue
             score = similarity * 0.75 + memory.importance * 0.25
