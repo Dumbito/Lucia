@@ -1,7 +1,9 @@
 """Central coordinator for the first Lucía prototype."""
 
 from dataclasses import dataclass, field
+from typing import Any
 
+from .actions import Action, ActionExecutor
 from .context import Context
 from .memory import Memory, MemoryStore
 from .planner import Plan, Planner, RuleBasedPlanner
@@ -9,13 +11,14 @@ from .planner import Plan, Planner, RuleBasedPlanner
 
 @dataclass(slots=True)
 class LuciaCore:
-    """Owns identity-independent system state and coordinates a cycle."""
+    """Owns identity-independent state and coordinates cognitive cycles."""
 
     memory: MemoryStore
     name: str = "Lucía"
     planner: Planner = field(default_factory=RuleBasedPlanner)
+    action_executor: ActionExecutor | None = None
 
-    def observe(self, event: dict) -> Context:
+    def observe(self, event: dict[str, Any]) -> Context:
         """Add an observed event to working context."""
         context = Context()
         context.add_event(event)
@@ -30,3 +33,27 @@ class LuciaCore:
     def plan(self, context: Context) -> Plan:
         """Produce a transient plan without executing any action."""
         return self.planner.plan(context)
+
+    def execute(self, action: Action) -> Any:
+        """Execute one action through the configured executor."""
+        if self.action_executor is None:
+            raise RuntimeError("No action executor configured")
+        result = self.action_executor.execute(action)
+        return result
+
+    def execute_plan(self, plan: Plan, context: Context) -> list[dict[str, Any]]:
+        """Execute executable plan steps and append normalized results to context."""
+        if self.action_executor is None:
+            raise RuntimeError("No action executor configured")
+
+        results: list[dict[str, Any]] = []
+        for step in plan.steps:
+            if step.action == "reason":
+                continue
+            result = self.action_executor.execute(
+                Action(name=step.action, parameters=dict(step.parameters))
+            )
+            normalized = result.as_dict()
+            results.append(normalized)
+            context.add_event({"type": "action.result", "data": normalized, "source": "action_executor"})
+        return results
