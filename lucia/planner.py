@@ -1,15 +1,12 @@
-"""Task planning primitives for Lucía.
-
-The planner is intentionally independent from any language model. A later
-cognitive engine can replace the rule-based implementation without changing
-how plans are represented or executed.
-"""
+"""Task planning primitives for Lucía."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import json
 from typing import Any, Protocol
 
 from .context import Context
+from .cognitive import CognitiveEngine, build_cognitive_request
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,7 +36,7 @@ class Planner(Protocol):
 
 @dataclass(slots=True)
 class RuleBasedPlanner:
-    """Small deterministic planner used until an LLM planner is connected."""
+    """Small deterministic planner used as a safe baseline."""
 
     def plan(self, context: Context) -> Plan:
         task = (context.current_task or "").strip()
@@ -54,8 +51,76 @@ class RuleBasedPlanner:
                 "memory_count": len(context.retrieved_memories),
             },
         )
-        return Plan(
-            goal=context.active_goal,
-            task=task,
-            steps=(step,),
+        return Plan(goal=context.active_goal, task=task, steps=(step,))
+
+
+@dataclass(slots=True)
+class CognitivePlanner:
+    """Build structured plans using a replaceable cognitive engine."""
+
+    engine: CognitiveEngine
+    max_steps: int = 8
+
+    def plan(self, context: Context) -> Plan:
+        task = (context.current_task or "").strip()
+        if not task:
+            return Plan(goal=context.active_goal, task="", steps=())
+
+        request = build_cognitive_request(context)
+        request = type(request)(
+            task=(
+                "Create a JSON plan for the task. Return only a JSON object with "
+                'a "steps" array. Each step must contain "action", "description", '
+                'and optional "parameters". Use action="reason" when no tool is needed.\n\n'
+                f"Task: {request.task}"
+            ),
+            goal=request.goal,
+            context=request.context,
         )
+        result = self.engine.reason(request)
+        if not result.success or not isinstance(result.output, str):
+            return RuleBasedPlanner().plan(context)
+
+        payload = self._parse_json(result.output)
+        if not isinstance(payload, dict) or not isinstance(payload.get("steps"), list):
+            return RuleBasedPlanner().plan(context)
+
+        steps: list[PlanStep] = []
+        for raw_step in payload["steps"][: self.max_steps]:
+            if not isinstance(raw_step, dict):
+                continue
+            action = raw_step.get("action")
+            description = raw_step.get("description")
+            parameters = raw_step.get("parameters", {})
+            if not isinstance(action, str) or not action.strip():
+                continue
+            if not isinstance(description, str) or not description.strip():
+                continue
+            if not isinstance(parameters, dict):
+                parameters = {}
+            steps.append(
+                PlanStep(
+                    action=action.strip(),
+                    description=description.strip(),
+                    parameters=dict(parameters),
+                )
+            )
+
+        if not steps:
+            return RuleBasedPlanner().plan(context)
+        return Plan(goal=context.active_goal, task=task, steps=tuple(steps))
+
+    @staticmethod
+    def _parse_json(output: str) -> Any:
+        text = output.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start == -1 or end <= start:
+                return None
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                return None
