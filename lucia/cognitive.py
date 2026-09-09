@@ -13,6 +13,7 @@ class CognitiveRequest:
     task: str
     goal: str | None = None
     context: dict[str, Any] = field(default_factory=dict)
+    output_format: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
