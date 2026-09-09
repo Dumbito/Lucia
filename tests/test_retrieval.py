@@ -24,3 +24,20 @@ def test_retrieval_returns_empty_without_query(tmp_path: Path) -> None:
 
     context = Context()
     assert MemoryRetriever(store).retrieve_for_context(context) == []
+
+
+def test_retrieval_handles_accents_and_partial_context(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "lucia.db")
+    store.save(
+        Memory(
+            content="Lucía debe ser principalmente local.",
+            kind="preference",
+            importance=0.72,
+        )
+    )
+
+    context = Context(active_goal="Arquitectura Lucia", current_task="procesamiento local")
+    memories = MemoryRetriever(store).retrieve_for_context(context)
+
+    assert len(memories) == 1
+    assert memories[0].content == "Lucía debe ser principalmente local."
