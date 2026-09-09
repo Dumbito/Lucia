@@ -6,10 +6,11 @@ capturing the screen. This keeps perception observable and low-cost.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from .events import Event
 
@@ -38,12 +39,7 @@ class LinuxPerception:
     def events(self, previous: SystemSnapshot | None, current: SystemSnapshot) -> list[Event]:
         """Convert changes in the snapshot into normalized events."""
         if previous is None:
-            return [Event(type="system.snapshot", data=current.__dict__ if hasattr(current, "__dict__") else {
-                "active_window": current.active_window,
-                "music_status": current.music_status,
-                "cpu_load": current.cpu_load,
-                "memory_percent": current.memory_percent,
-            }, source="linux")]
+            return [Event(type="system.snapshot", data=asdict(current), source="linux")]
 
         events: list[Event] = []
         if current.active_window != previous.active_window:
@@ -70,13 +66,12 @@ class LinuxPerception:
                 check=False,
             )
             if result.returncode == 0:
-                import json
                 try:
                     data = json.loads(result.stdout)
                     title = data.get("title")
                     return str(title) if title else None
                 except json.JSONDecodeError:
-                    return None
+                    pass
         return os.environ.get("XDG_CURRENT_DESKTOP")
 
     @staticmethod
@@ -95,7 +90,7 @@ class LinuxPerception:
     @staticmethod
     def _load_average() -> float | None:
         try:
-            return os.getloadavg()[0]
+            return round(os.getloadavg()[0], 2)
         except OSError:
             return None
 
@@ -117,3 +112,19 @@ class LinuxPerception:
             return round((1 - available / total) * 100, 2)
         except (OSError, ValueError):
             return None
+
+
+def main() -> None:
+    """Print one real perception snapshot for manual inspection."""
+    snapshot = LinuxPerception().snapshot()
+    print("Lucía — Perception v0.1")
+    print("=" * 32)
+    print(f"Ventana activa : {snapshot.active_window or 'desconocida'}")
+    print(f"Media          : {snapshot.music_status or 'sin reproductor detectado'}")
+    print(f"CPU load       : {snapshot.cpu_load if snapshot.cpu_load is not None else 'N/A'}")
+    print(f"Memoria        : {snapshot.memory_percent if snapshot.memory_percent is not None else 'N/A'}%")
+    print("=" * 32)
+
+
+if __name__ == "__main__":
+    main()
