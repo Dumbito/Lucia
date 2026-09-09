@@ -24,6 +24,14 @@ class CognitiveResult:
     error: str | None = None
     engine: str = "unknown"
 
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "output": self.output,
+            "error": self.error,
+            "engine": self.engine,
+        }
+
 
 class CognitiveEngine(Protocol):
     """Interface for local or remote reasoning engines."""
@@ -68,6 +76,7 @@ def build_cognitive_request(context: Context, *, description: str | None = None)
         context={
             "events": tuple(context.events),
             "retrieved_memories": tuple(context.retrieved_memories),
+            "cognitive_results": tuple(context.cognitive_results),
             "action_results": tuple(context.action_results),
             "evaluations": tuple(context.evaluations),
         },
