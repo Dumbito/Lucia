@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+*.log
+data/
+memory/
+models/
+.vscode/
+.idea/
