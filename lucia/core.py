@@ -9,7 +9,7 @@ from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitiv
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
-from .planner import CognitivePlanner, Plan, Planner, RuleBasedPlanner
+from .planner import CognitivePlanner, Plan, PlanStep, Planner, RuleBasedPlanner
 from .retrieval import MemoryRetriever
 
 
@@ -114,6 +114,19 @@ class LuciaCore:
 
         return results
 
+    @staticmethod
+    def _already_succeeded(step: PlanStep, context: Context) -> bool:
+        """Detect an exact action/parameter repeat that already succeeded."""
+        for action_result, evaluation in zip(context.action_results, context.evaluations):
+            if not evaluation.get("success"):
+                continue
+            if action_result.get("action") != step.action:
+                continue
+            parameters = action_result.get("parameters", {})
+            if parameters == dict(step.parameters):
+                return True
+        return False
+
     def run_cycle(
         self,
         event: dict[str, Any],
@@ -155,13 +168,16 @@ class LuciaCore:
 
             executable_steps = tuple(step for step in last_plan.steps if step.action != "reason")
             if not executable_steps:
-                # A reason-only plan is the planner's terminal signal once the
-                # agent has already acted. On the initial cycle, however, the
-                # reason step is the cognitive work of the cycle itself.
                 if iteration == 0:
                     for step in last_plan.steps:
                         if step.action == "reason":
                             self.reason(context, description=step.description)
+                break
+
+            fresh_steps = tuple(
+                step for step in executable_steps if not self._already_succeeded(step, context)
+            )
+            if not fresh_steps:
                 break
 
             for step in last_plan.steps:
@@ -169,14 +185,10 @@ class LuciaCore:
                     self.reason(context, description=step.description)
 
             iteration_results = self.execute_plan(
-                Plan(goal=last_plan.goal, task=last_plan.task, steps=executable_steps),
+                Plan(goal=last_plan.goal, task=last_plan.task, steps=fresh_steps),
                 context,
             )
             all_action_results.extend(iteration_results)
-
-            # A successful action is feedback, not termination. The next
-            # iteration lets the planner inspect the result and decide whether
-            # another action or a terminal reason-only plan is required.
 
         return CycleResult(
             context=context,
