@@ -60,3 +60,18 @@ def test_ollama_request_contains_goal_task_and_context() -> None:
     assert "Goal: help" in body
     assert "Task: answer" in body
     assert "user.message" in body
+
+
+def test_ollama_request_uses_json_format_when_requested() -> None:
+    engine = OllamaCognitiveEngine()
+    captured = {}
+
+    def fake_urlopen(http_request, timeout):
+        captured["body"] = http_request.data
+        return FakeResponse()
+
+    with patch("lucia.ollama.request.urlopen", side_effect=fake_urlopen):
+        engine.reason(CognitiveRequest(task="plan", output_format="json"))
+
+    body = captured["body"].decode("utf-8")
+    assert '"format": "json"' in body
