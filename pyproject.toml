@@ -9,6 +9,10 @@ description = "Local-first persistent personal AI system"
 requires-python = ">=3.14"
 dependencies = []
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+semantic = ["sentence-transformers>=5"]
+
 [project.scripts]
 lucia = "lucia.__main__:main"
 
