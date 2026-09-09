@@ -122,23 +122,63 @@ class LuciaCore:
         task: str | None = None,
     ) -> CycleResult:
         """Run one complete cognitive cycle."""
+        return self.run_agent(
+            event,
+            goal=goal,
+            task=task,
+            max_iterations=1,
+        )
+
+    def run_agent(
+        self,
+        event: dict[str, Any],
+        *,
+        goal: str | None = None,
+        task: str | None = None,
+        max_iterations: int = 4,
+    ) -> CycleResult:
+        """Iterate plan → action → evaluation → reasoning until completion.
+
+        Each iteration receives the accumulated action results and evaluations
+        through the same working context, while the planner may select a new
+        plan based on those results.
+        """
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1")
+
         context = self.observe(event)
         context.active_goal = goal
         context.current_task = task
+        all_action_results: list[dict[str, Any]] = []
+        last_plan = Plan(goal=goal, task=(task or "").strip(), steps=())
 
-        context.retrieved_memories = [
-            self._memory_as_dict(memory) for memory in self.retrieve_memories(context)
-        ]
+        for _ in range(max_iterations):
+            context.retrieved_memories = [
+                self._memory_as_dict(memory) for memory in self.retrieve_memories(context)
+            ]
+            last_plan = self.plan(context)
 
-        plan = self.plan(context)
+            for step in last_plan.steps:
+                if step.action == "reason":
+                    self.reason(context, description=step.description)
 
-        for step in plan.steps:
-            if step.action == "reason":
-                self.reason(context, description=step.description)
+            executable_steps = tuple(step for step in last_plan.steps if step.action != "reason")
+            if not executable_steps:
+                break
 
-        action_results = tuple(self.execute_plan(plan, context))
+            iteration_results = self.execute_plan(
+                Plan(goal=last_plan.goal, task=last_plan.task, steps=executable_steps),
+                context,
+            )
+            all_action_results.extend(iteration_results)
+
+            if not iteration_results or all(
+                item["evaluation"]["success"] for item in iteration_results
+            ):
+                break
+
         return CycleResult(
             context=context,
-            plan=plan,
-            action_results=action_results,
+            plan=last_plan,
+            action_results=tuple(all_action_results),
         )
