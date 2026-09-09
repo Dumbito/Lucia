@@ -39,7 +39,7 @@ def run_flow(
     if not process:
         return salience, False, []
 
-    gate = MemoryGate(salience_threshold=0.75)
+    gate = MemoryGate()
     if not gate.should_remember(event, salience):
         return salience, False, []
 
