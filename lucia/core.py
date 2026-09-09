@@ -137,12 +137,7 @@ class LuciaCore:
         task: str | None = None,
         max_iterations: int = 4,
     ) -> CycleResult:
-        """Iterate plan → action → evaluation → reasoning until completion.
-
-        Each iteration receives the accumulated action results and evaluations
-        through the same working context, while the planner may select a new
-        plan based on those results.
-        """
+        """Iterate plan → action → evaluation → reasoning until completion."""
         if max_iterations < 1:
             raise ValueError("max_iterations must be at least 1")
 
@@ -172,10 +167,9 @@ class LuciaCore:
             )
             all_action_results.extend(iteration_results)
 
-            if not iteration_results or all(
-                item["evaluation"]["success"] for item in iteration_results
-            ):
-                break
+            # A successful action is feedback, not termination. The next
+            # iteration lets the planner inspect the result and decide whether
+            # another action or a reasoning step is required.
 
         return CycleResult(
             context=context,
