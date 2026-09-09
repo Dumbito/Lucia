@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -80,12 +80,8 @@ def test_router_delegates_only_to_selected_engine() -> None:
 
 def test_router_skips_disabled_models() -> None:
     router, engines = make_router()
-    router.profiles["qwen3-coder:30b"] = router.profiles["qwen3-coder:30b"].__class__(
-        **{
-            **router.profiles["qwen3-coder:30b"].__dict__,
-            "enabled": False,
-        }
-    )
+    profile = router.profiles["qwen3-coder:30b"]
+    router.profiles["qwen3-coder:30b"] = replace(profile, enabled=False)
 
     selection = router.select(CognitiveRequest(task="Implement a Python API"))
 
