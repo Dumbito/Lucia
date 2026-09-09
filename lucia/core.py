@@ -5,6 +5,7 @@ from typing import Any
 
 from .actions import Action, ActionExecutor
 from .context import Context
+from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitive_request
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
@@ -18,6 +19,7 @@ class LuciaCore:
     memory: MemoryStore
     name: str = "Lucía"
     planner: Planner = field(default_factory=RuleBasedPlanner)
+    cognitive_engine: CognitiveEngine = field(default_factory=RuleBasedCognitiveEngine)
     action_executor: ActionExecutor | None = None
     evaluator: RuleBasedEvaluator = field(default_factory=RuleBasedEvaluator)
 
@@ -36,6 +38,14 @@ class LuciaCore:
     def plan(self, context: Context) -> Plan:
         """Produce a transient plan without executing any action."""
         return self.planner.plan(context)
+
+    def reason(self, context: Context, *, description: str | None = None) -> dict[str, Any]:
+        """Run the configured cognitive engine and store its result in context."""
+        request = build_cognitive_request(context, description=description)
+        result = self.cognitive_engine.reason(request)
+        normalized = result.as_dict()
+        context.add_cognitive_result(normalized)
+        return normalized
 
     def execute(self, action: Action) -> Any:
         """Execute one action through the configured executor."""
@@ -80,16 +90,16 @@ class LuciaCore:
         goal: str | None = None,
         task: str | None = None,
     ) -> CycleResult:
-        """Run one complete deterministic cognitive cycle.
-
-        The cycle is intentionally explicit: observe -> build context -> plan ->
-        execute -> evaluate -> optionally remember. A future cognitive engine
-        can replace planning/reasoning without changing this orchestration.
-        """
+        """Run one complete deterministic cognitive cycle."""
         context = self.observe(event)
         context.active_goal = goal
         context.current_task = task
         plan = self.plan(context)
+
+        for step in plan.steps:
+            if step.action == "reason":
+                self.reason(context, description=step.description)
+
         action_results = tuple(self.execute_plan(plan, context))
         return CycleResult(
             context=context,
