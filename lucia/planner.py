@@ -80,6 +80,8 @@ class CognitivePlanner:
                 "Create a JSON plan for the task. Return only a JSON object with "
                 'a "steps" array. Each step must contain "action", "description", '
                 'and optional "parameters". Use action="reason" when no tool is needed. '
+                "If the task has already been satisfied by a successful prior action, "
+                "return an empty steps array instead of repeating that action. "
                 f"Allowed actions: {available}. Never invent an action.\n\n"
                 f"Task: {request.task}"
             ),
@@ -87,6 +89,7 @@ class CognitivePlanner:
             context=request.context,
         )
         result = self.engine.reason(request)
+        context.add_cognitive_result(result.as_dict())
         if not result.success or not isinstance(result.output, str):
             return RuleBasedPlanner().plan(context)
 
@@ -119,7 +122,7 @@ class CognitivePlanner:
             )
 
         if not steps:
-            return RuleBasedPlanner().plan(context)
+            return Plan(goal=context.active_goal, task=task, steps=())
         return Plan(goal=context.active_goal, task=task, steps=tuple(steps))
 
     @staticmethod
