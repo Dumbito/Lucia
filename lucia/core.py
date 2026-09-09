@@ -10,6 +10,7 @@ from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitiv
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .events import Event
+from .initiative import InitiativeEngine
 from .memory import Memory, MemoryStore
 from .model_router import ModelRouter
 from .planner import CognitivePlanner, Plan, PlanStep, Planner, RuleBasedPlanner
@@ -28,6 +29,7 @@ class LuciaCore:
     evaluator: RuleBasedEvaluator = field(default_factory=RuleBasedEvaluator)
     retriever: MemoryRetriever | None = None
     attention_adapter: AttentionAdapter | None = None
+    initiative_engine: InitiativeEngine | None = None
 
     def observe(self, event: dict[str, Any]) -> Context:
         """Add an observed event to working context."""
@@ -156,7 +158,7 @@ class LuciaCore:
             max_iterations=1,
         )
 
-    def run_agent(
+    def run_proactive(
         self,
         event: dict[str, Any],
         *,
@@ -164,9 +166,31 @@ class LuciaCore:
         task: str | None = None,
         max_iterations: int = 4,
     ) -> CycleResult:
+        """Run a cycle in proactive mode, gated by attention and initiative."""
+        return self.run_agent(
+            event,
+            goal=goal,
+            task=task,
+            max_iterations=max_iterations,
+            proactive=True,
+        )
+
+    def run_agent(
+        self,
+        event: dict[str, Any],
+        *,
+        goal: str | None = None,
+        task: str | None = None,
+        max_iterations: int = 4,
+        proactive: bool = False,
+    ) -> CycleResult:
         """Iterate plan → action → evaluation → reasoning until completion."""
         if max_iterations < 1:
             raise ValueError("max_iterations must be at least 1")
+        if proactive and self.initiative_engine is None:
+            raise RuntimeError("No initiative engine configured")
+        if proactive and self.attention_adapter is None:
+            raise RuntimeError("Proactive mode requires an attention adapter")
 
         context = self.observe(event)
         context.active_goal = goal
@@ -203,6 +227,29 @@ class LuciaCore:
                     plan=Plan(goal=goal, task=(task or "").strip(), steps=()),
                     action_results=(),
                 )
+
+            if proactive:
+                decision = self.initiative_engine.decide(
+                    salience=salience,
+                    **components,
+                )
+                context.add_event(
+                    {
+                        "type": "initiative.result",
+                        "data": {
+                            "act": decision.act,
+                            "score": decision.score,
+                            "reason": decision.reason,
+                        },
+                        "source": "initiative",
+                    }
+                )
+                if not decision.act:
+                    return CycleResult(
+                        context=context,
+                        plan=Plan(goal=goal, task=(task or "").strip(), steps=()),
+                        action_results=(),
+                    )
 
         all_action_results: list[dict[str, Any]] = []
         last_plan = Plan(goal=goal, task=(task or "").strip(), steps=())
