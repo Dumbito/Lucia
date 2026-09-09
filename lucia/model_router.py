@@ -228,6 +228,12 @@ def build_default_router(engines: dict[str, CognitiveEngine]) -> ModelRouter:
             capabilities=("general", "fast", "reasoning", "agent"),
             context_window=32768, speed=5, reasoning=3, coding=2, priority=1,
         ),
+        # Small local fallback for development when the main candidate set
+        # has not been installed yet. It is intentionally lower priority.
+        "qwen3:4b": dict(
+            capabilities=("general", "fast"),
+            context_window=32768, speed=5, reasoning=2, coding=1, priority=0,
+        ),
     }
     for model_id, kwargs in profiles.items():
         engine = engines.get(model_id)
@@ -279,6 +285,7 @@ def build_ollama_router(
         "qwen2.5-coder:14b",
         "qwen3:14b",
         "qwen3:8b",
+        "qwen3:4b",
     )
     selected_models = tuple(models or default_models)
     installed = set(_ollama_installed_models(base_url, timeout))
