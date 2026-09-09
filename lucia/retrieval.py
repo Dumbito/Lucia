@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .embeddings import cosine_similarity, text_vector
+from .embeddings import (
+    EmbeddingProvider,
+    cosine_similarity,
+    dense_cosine_similarity,
+    text_vector,
+)
 from .memory import Memory, MemoryStore
 
 
@@ -12,22 +17,41 @@ from .memory import Memory, MemoryStore
 class MemoryRetriever:
     """Retrieve persistent memories relevant to the current task.
 
-    The first semantic layer is deliberately local and dependency-free:
-    normalized sparse text vectors provide similarity without requiring an
-    embedding model. A real local embedding backend can replace this later.
+    With an ``EmbeddingProvider`` this performs true dense semantic retrieval
+    over the complete memory set, so lexical overlap is no longer required.
+    Without one it keeps the dependency-free lexical fallback.
     """
 
     store: MemoryStore
     limit: int = 5
     min_similarity: float = 0.15
+    embedding_provider: EmbeddingProvider | None = None
 
     def retrieve(self, *, goal: str | None = None, task: str | None = None) -> list[Memory]:
-        """Rank memories by normalized token similarity and importance."""
+        """Rank memories by semantic similarity and importance."""
         query = " ".join(part.strip() for part in (task, goal) if part and part.strip())
         if not query:
             return []
 
-        # Request a broad lexical candidate set, then rank it semantically.
+        if self.embedding_provider is None:
+            return self._retrieve_lexical(query)
+
+        query_vector = self.embedding_provider.embed(query)
+        candidates = self.store.list_all()
+        ranked: list[tuple[float, Memory]] = []
+
+        for memory in candidates:
+            similarity = dense_cosine_similarity(query_vector, self.embedding_provider.embed(memory.content))
+            if similarity < self.min_similarity:
+                continue
+            score = similarity * 0.75 + memory.importance * 0.25
+            ranked.append((score, memory))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [memory for _, memory in ranked[: self.limit]]
+
+    def _retrieve_lexical(self, query: str) -> list[Memory]:
+        """Dependency-free fallback used before a model is configured."""
         candidates = self.store.search(query, limit=max(self.limit * 5, 25))
         query_vector = text_vector(query)
         ranked: list[tuple[float, Memory]] = []
