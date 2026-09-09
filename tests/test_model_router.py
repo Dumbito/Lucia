@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 import pytest
 
 from lucia.cognitive import CognitiveRequest, CognitiveResult
-from lucia.model_router import ModelRouter, build_default_router
+from lucia.model_router import ModelRouter, _ollama_installed_models, build_default_router, build_ollama_router
 
 
 @dataclass
@@ -79,9 +79,6 @@ def test_router_skips_disabled_models() -> None:
 
 def test_router_respects_context_window() -> None:
     router, _ = make_router()
-    # The estimator uses roughly 4 characters per token. This context is
-    # larger than gpt-oss:20b's 131K window but still fits qwen3-coder:30b's
-    # 262K window, so the latter must be selected.
     huge_context = {"payload": "x" * 600_000}
     selection = router.select(CognitiveRequest(task="Analyze", context=huge_context))
     assert selection.model_id == "qwen3-coder:30b"
@@ -92,3 +89,34 @@ def test_router_requires_an_enabled_model() -> None:
     router = ModelRouter()
     with pytest.raises(RuntimeError, match="No enabled cognitive models"):
         router.select(CognitiveRequest(task="hello"))
+
+
+def test_ollama_installed_models_reads_api_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"models": [{"name": "qwen3:4b"}, {"name": "qwen3:8b"}]}'
+
+    monkeypatch.setattr("lucia.model_router.request.urlopen", lambda *args, **kwargs: FakeResponse())
+    assert _ollama_installed_models("http://127.0.0.1:11434", 1.0) == ("qwen3:4b", "qwen3:8b")
+
+
+def test_build_ollama_router_uses_only_installed_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "lucia.model_router._ollama_installed_models",
+        lambda base_url, timeout: ("qwen3:4b", "qwen3:8b"),
+    )
+    router = build_ollama_router()
+    assert set(router.engines) == {"qwen3:8b"} is False
+    assert set(router.engines) == {"qwen3:8b"}
+
+
+def test_build_ollama_router_fails_when_no_candidate_is_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("lucia.model_router._ollama_installed_models", lambda base_url, timeout: ())
+    with pytest.raises(RuntimeError, match="None of the configured Lucía models"):
+        build_ollama_router()
