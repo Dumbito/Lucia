@@ -97,8 +97,10 @@ class CognitivePlanner:
         if not isinstance(payload, dict) or not isinstance(payload.get("steps"), list):
             return RuleBasedPlanner().plan(context)
 
+        raw_steps = payload["steps"]
         steps: list[PlanStep] = []
-        for raw_step in payload["steps"][: self.max_steps]:
+        rejected_action = False
+        for raw_step in raw_steps[: self.max_steps]:
             if not isinstance(raw_step, dict):
                 continue
             action = raw_step.get("action")
@@ -110,6 +112,7 @@ class CognitivePlanner:
                 continue
             action = action.strip()
             if action != "reason" and self.allowed_actions is not None and action not in self.allowed_actions:
+                rejected_action = True
                 continue
             if not isinstance(parameters, dict):
                 parameters = {}
@@ -120,6 +123,9 @@ class CognitivePlanner:
                     parameters=dict(parameters),
                 )
             )
+
+        if rejected_action and not steps:
+            return RuleBasedPlanner().plan(context)
 
         if not steps:
             return Plan(goal=context.active_goal, task=task, steps=())
