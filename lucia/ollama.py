@@ -5,9 +5,9 @@ its HTTP API directly. No Ollama dependency is required to import Lucía.
 """
 
 from dataclasses import dataclass
+import json
 from typing import Any
 from urllib import error, request
-import json
 
 from .cognitive import CognitiveRequest, CognitiveResult
 
@@ -23,7 +23,7 @@ class OllamaCognitiveEngine:
 
     def reason(self, request_data: CognitiveRequest) -> CognitiveResult:
         """Send one reasoning request to Ollama and normalize the response."""
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "stream": False,
             "messages": [
@@ -37,6 +37,9 @@ class OllamaCognitiveEngine:
                 },
             ],
         }
+        if request_data.output_format == "json":
+            payload["format"] = "json"
+
         body = json.dumps(payload).encode("utf-8")
         endpoint = self.base_url.rstrip("/") + "/api/chat"
         http_request = request.Request(
