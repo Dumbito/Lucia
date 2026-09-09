@@ -90,10 +90,11 @@ class LuciaCore:
         goal: str | None = None,
         task: str | None = None,
     ) -> CycleResult:
-        """Run one complete deterministic cognitive cycle."""
+        """Run one complete cognitive cycle."""
         context = self.observe(event)
         context.active_goal = goal
         context.current_task = task
+
         plan = self.plan(context)
 
         for step in plan.steps:
