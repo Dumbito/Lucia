@@ -1,12 +1,12 @@
 """Real smoke test for Attention -> Initiative -> Ollama -> action."""
 
-from lucia.actions import ActionExecutor
+from lucia.actions import ActionExecutor, ToolRegistry
 from lucia.attention_adapter import AttentionAdapter
 from lucia.core import LuciaCore
 from lucia.initiative import InitiativeEngine
 from lucia.model_router import build_ollama_router
 from lucia.storage import SQLiteMemoryStore
-from lucia.tools import GetTimeTool, ToolRegistry
+from lucia.tools import GetTimeTool
 from lucia.planner import CognitivePlanner
 
 
