@@ -79,10 +79,13 @@ def test_router_skips_disabled_models() -> None:
 
 def test_router_respects_context_window() -> None:
     router, _ = make_router()
-    huge_context = {"payload": "x" * 140_000}
+    # The estimator uses roughly 4 characters per token. This context is
+    # larger than gpt-oss:20b's 131K window but still fits qwen3-coder:30b's
+    # 262K window, so the latter must be selected.
+    huge_context = {"payload": "x" * 600_000}
     selection = router.select(CognitiveRequest(task="Analyze", context=huge_context))
     assert selection.model_id == "qwen3-coder:30b"
-    assert selection.model_id != "qwen3:8b"
+    assert selection.model_id != "gpt-oss:20b"
 
 
 def test_router_requires_an_enabled_model() -> None:
