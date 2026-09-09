@@ -147,19 +147,26 @@ class LuciaCore:
         all_action_results: list[dict[str, Any]] = []
         last_plan = Plan(goal=goal, task=(task or "").strip(), steps=())
 
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
             context.retrieved_memories = [
                 self._memory_as_dict(memory) for memory in self.retrieve_memories(context)
             ]
             last_plan = self.plan(context)
 
+            executable_steps = tuple(step for step in last_plan.steps if step.action != "reason")
+            if not executable_steps:
+                # A reason-only plan is the planner's terminal signal once the
+                # agent has already acted. On the initial cycle, however, the
+                # reason step is the cognitive work of the cycle itself.
+                if iteration == 0:
+                    for step in last_plan.steps:
+                        if step.action == "reason":
+                            self.reason(context, description=step.description)
+                break
+
             for step in last_plan.steps:
                 if step.action == "reason":
                     self.reason(context, description=step.description)
-
-            executable_steps = tuple(step for step in last_plan.steps if step.action != "reason")
-            if not executable_steps:
-                break
 
             iteration_results = self.execute_plan(
                 Plan(goal=last_plan.goal, task=last_plan.task, steps=executable_steps),
@@ -169,7 +176,7 @@ class LuciaCore:
 
             # A successful action is feedback, not termination. The next
             # iteration lets the planner inspect the result and decide whether
-            # another action or a reasoning step is required.
+            # another action or a terminal reason-only plan is required.
 
         return CycleResult(
             context=context,
