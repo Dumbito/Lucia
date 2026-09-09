@@ -5,6 +5,7 @@ from typing import Any
 
 from .actions import Action, ActionExecutor
 from .context import Context
+from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
 from .planner import Plan, Planner, RuleBasedPlanner
@@ -71,3 +72,27 @@ class LuciaCore:
                 self.remember(summary, kind="episodic", importance=max(evaluation.score, 0.7))
 
         return results
+
+    def run_cycle(
+        self,
+        event: dict[str, Any],
+        *,
+        goal: str | None = None,
+        task: str | None = None,
+    ) -> CycleResult:
+        """Run one complete deterministic cognitive cycle.
+
+        The cycle is intentionally explicit: observe -> build context -> plan ->
+        execute -> evaluate -> optionally remember. A future cognitive engine
+        can replace planning/reasoning without changing this orchestration.
+        """
+        context = self.observe(event)
+        context.active_goal = goal
+        context.current_task = task
+        plan = self.plan(context)
+        action_results = tuple(self.execute_plan(plan, context))
+        return CycleResult(
+            context=context,
+            plan=plan,
+            action_results=action_results,
+        )
