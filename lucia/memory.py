@@ -1,7 +1,7 @@
 """Persistent-memory abstractions.
 
-The first implementation deliberately keeps storage simple. A concrete
-backend can be introduced once the memory contract is stable.
+The memory contract stays independent from the retrieval implementation so
+storage and embedding backends can evolve independently.
 """
 
 from dataclasses import dataclass, field
@@ -27,3 +27,5 @@ class MemoryStore(Protocol):
     def save(self, memory: Memory) -> None: ...
 
     def search(self, query: str, limit: int = 5) -> list[Memory]: ...
+
+    def list_all(self) -> list[Memory]: ...
