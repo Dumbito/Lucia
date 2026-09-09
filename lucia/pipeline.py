@@ -11,6 +11,7 @@ from .events import Event
 from .memory import Memory
 from .memory_gate import MemoryGate
 from .perception import LinuxPerception, SystemSnapshot
+from .retrieval import MemoryRetriever
 from .storage import SQLiteMemoryStore
 
 
@@ -20,6 +21,7 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=0.5, help="attention threshold")
     parser.add_argument("--memory-threshold", type=float, default=0.75, help="minimum salience for long-term memory")
     parser.add_argument("--memory-db", default="data/lucia.db", help="SQLite memory database path")
+    parser.add_argument("--memory-limit", type=int, default=5, help="maximum memories retrieved into context")
     parser.add_argument("--goal", default=None, help="current active goal")
     parser.add_argument("--task", default=None, help="current task")
     args = parser.parse_args()
@@ -30,21 +32,40 @@ def main() -> None:
         parser.error("--threshold must be between 0 and 1")
     if not 0.0 <= args.memory_threshold <= 1.0:
         parser.error("--memory-threshold must be between 0 and 1")
+    if args.memory_limit <= 0:
+        parser.error("--memory-limit must be greater than zero")
 
     perception = LinuxPerception()
     attention = AttentionAdapter(threshold=args.threshold)
     context = Context(active_goal=args.goal, current_task=args.task)
     memory_gate = MemoryGate(salience_threshold=args.memory_threshold)
     memory_store = SQLiteMemoryStore(args.memory_db)
+    memory_retriever = MemoryRetriever(memory_store, limit=args.memory_limit)
     previous: SystemSnapshot | None = None
     memories_saved = 0
 
-    print("Lucía — Perception → Attention → Context → Memory v0.3")
-    print("Los eventos salientes entran al contexto; solo candidatos explícitos pasan a memoria.")
+    print("Lucía — Perception → Attention → Context → Retrieval → Memory v0.4")
+    print("Los eventos salientes entran al contexto; la memoria se recupera según el objetivo/tarea.")
     if args.goal or args.task:
         print(f"Objetivo: {args.goal or '—'}")
         print(f"Tarea:    {args.task or '—'}")
     print(f"Memoria:  {args.memory_db}")
+
+    retrieved = memory_retriever.retrieve_for_context(context)
+    context.retrieved_memories = [
+        {
+            "content": memory.content,
+            "kind": memory.kind,
+            "importance": memory.importance,
+            "confidence": memory.confidence,
+            "created_at": memory.created_at.isoformat(),
+            "metadata": memory.metadata,
+        }
+        for memory in retrieved
+    ]
+    print(f"Recuerdos recuperados: {len(retrieved)}")
+    for memory in retrieved:
+        print(f"  [{memory.kind}] {memory.content} (importance={memory.importance:.2f})")
     print("=" * 76)
 
     try:
@@ -98,6 +119,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nPipeline detenido.")
         print(f"Eventos conservados en contexto: {len(context.events)}")
+        print(f"Recuerdos en contexto: {len(context.retrieved_memories)}")
         print(f"Memorias guardadas: {memories_saved}")
 
 
