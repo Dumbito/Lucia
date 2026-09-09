@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .attention import AttentionEngine
+from .embeddings import normalize_text
 from .events import Event
 
 
@@ -59,13 +60,15 @@ class AttentionAdapter:
         if not active_goal and not current_task:
             return 0.25
 
-        text = " ".join(
-            [
-                str(event.type),
-                *(str(value) for value in event.data.values()),
-            ]
-        ).lower()
-        context = " ".join(filter(None, [active_goal, current_task])).lower()
+        text = normalize_text(
+            " ".join(
+                [
+                    str(event.type),
+                    *(str(value) for value in event.data.values()),
+                ]
+            )
+        )
+        context = normalize_text(" ".join(filter(None, [active_goal, current_task])))
         tokens = {token for token in context.split() if len(token) >= 4}
         return 0.75 if tokens and any(token in text for token in tokens) else 0.30
 
