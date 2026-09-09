@@ -56,10 +56,15 @@ class RuleBasedPlanner:
 
 @dataclass(slots=True)
 class CognitivePlanner:
-    """Build structured plans using a replaceable cognitive engine."""
+    """Build structured plans using a replaceable cognitive engine.
+
+    ``allowed_actions`` is an explicit capability boundary. When provided,
+    the model may only emit ``reason`` or actions present in that set.
+    """
 
     engine: CognitiveEngine
     max_steps: int = 8
+    allowed_actions: frozenset[str] | None = None
 
     def plan(self, context: Context) -> Plan:
         task = (context.current_task or "").strip()
@@ -67,11 +72,15 @@ class CognitivePlanner:
             return Plan(goal=context.active_goal, task="", steps=())
 
         request = build_cognitive_request(context)
+        available = "reason" if self.allowed_actions is None else ", ".join(
+            ["reason", *sorted(self.allowed_actions)]
+        )
         request = type(request)(
             task=(
                 "Create a JSON plan for the task. Return only a JSON object with "
                 'a "steps" array. Each step must contain "action", "description", '
-                'and optional "parameters". Use action="reason" when no tool is needed.\n\n'
+                'and optional "parameters". Use action="reason" when no tool is needed. '
+                f"Allowed actions: {available}. Never invent an action.\n\n"
                 f"Task: {request.task}"
             ),
             goal=request.goal,
@@ -96,11 +105,14 @@ class CognitivePlanner:
                 continue
             if not isinstance(description, str) or not description.strip():
                 continue
+            action = action.strip()
+            if action != "reason" and self.allowed_actions is not None and action not in self.allowed_actions:
+                continue
             if not isinstance(parameters, dict):
                 parameters = {}
             steps.append(
                 PlanStep(
-                    action=action.strip(),
+                    action=action,
                     description=description.strip(),
                     parameters=dict(parameters),
                 )
