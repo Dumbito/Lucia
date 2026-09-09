@@ -20,6 +20,15 @@ class FakeEmbeddingProvider:
         return self.vectors.get(normalize_text(text).strip(".?!"), (0.0, 0.0, 1.0))
 
 
+class CountingEmbeddingProvider(FakeEmbeddingProvider):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def embed(self, text: str) -> tuple[float, ...]:
+        self.calls += 1
+        return super().embed(text)
+
+
 def test_retrieval_uses_current_context(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "lucia.db")
     store.save(Memory(content="Lucía uses a local SQLite memory store.", kind="semantic", importance=0.9))
@@ -80,3 +89,25 @@ def test_dense_retrieval_does_not_require_shared_words(tmp_path: Path) -> None:
 
     assert len(memories) == 1
     assert memories[0].content == "La computación debe ejecutarse en el equipo del usuario."
+
+
+def test_dense_embeddings_are_cached_in_sqlite(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "lucia.db")
+    store.save(Memory(content="La computación debe ejecutarse en el equipo del usuario.", importance=0.8))
+    provider = CountingEmbeddingProvider()
+    retriever = MemoryRetriever(
+        store,
+        limit=1,
+        min_similarity=0.5,
+        embedding_provider=provider,
+        embedding_model_name="fake-v1",
+    )
+
+    first = retriever.retrieve(goal="arquitectura procesamiento local")
+    first_calls = provider.calls
+    second = retriever.retrieve(goal="arquitectura procesamiento local")
+
+    assert first and second
+    assert first_calls == 2
+    assert provider.calls == first_calls + 1
+    assert store.list_all()[0].embedding is not None
