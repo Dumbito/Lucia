@@ -10,6 +10,7 @@ from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
 from .planner import Plan, Planner, RuleBasedPlanner
+from .retrieval import MemoryRetriever
 
 
 @dataclass(slots=True)
@@ -22,6 +23,7 @@ class LuciaCore:
     cognitive_engine: CognitiveEngine = field(default_factory=RuleBasedCognitiveEngine)
     action_executor: ActionExecutor | None = None
     evaluator: RuleBasedEvaluator = field(default_factory=RuleBasedEvaluator)
+    retriever: MemoryRetriever | None = None
 
     def observe(self, event: dict[str, Any]) -> Context:
         """Add an observed event to working context."""
@@ -34,6 +36,23 @@ class LuciaCore:
         memory = Memory(content=content, kind=kind, importance=importance)
         self.memory.save(memory)
         return memory
+
+    def retrieve_memories(self, context: Context) -> list[Memory]:
+        """Retrieve memories relevant to the current working context."""
+        retriever = self.retriever or MemoryRetriever(self.memory)
+        return retriever.retrieve_for_context(context)
+
+    @staticmethod
+    def _memory_as_dict(memory: Memory) -> dict[str, Any]:
+        """Expose only useful memory fields to the cognitive context."""
+        return {
+            "content": memory.content,
+            "kind": memory.kind,
+            "importance": memory.importance,
+            "confidence": memory.confidence,
+            "created_at": memory.created_at.isoformat(),
+            "metadata": dict(memory.metadata),
+        }
 
     def plan(self, context: Context) -> Plan:
         """Produce a transient plan without executing any action."""
@@ -94,6 +113,10 @@ class LuciaCore:
         context = self.observe(event)
         context.active_goal = goal
         context.current_task = task
+
+        context.retrieved_memories = [
+            self._memory_as_dict(memory) for memory in self.retrieve_memories(context)
+        ]
 
         plan = self.plan(context)
 
