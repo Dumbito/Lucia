@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from lucia.context import Context
+from lucia.embeddings import normalize_text
 from lucia.memory import Memory
 from lucia.retrieval import MemoryRetriever
 from lucia.storage import SQLiteMemoryStore
@@ -12,13 +13,11 @@ class FakeEmbeddingProvider:
     vectors = {
         "arquitectura procesamiento local": (1.0, 0.0, 0.0),
         "la computacion debe ejecutarse en el equipo del usuario": (0.98, 0.05, 0.0),
-        "el avatar tendrá una interfaz visual": (0.0, 1.0, 0.0),
+        "el avatar tendra una interfaz visual": (0.0, 1.0, 0.0),
     }
 
     def embed(self, text: str) -> tuple[float, ...]:
-        if text in self.vectors:
-            return self.vectors[text]
-        return (0.0, 0.0, 1.0)
+        return self.vectors.get(normalize_text(text).strip(".?!"), (0.0, 0.0, 1.0))
 
 
 def test_retrieval_uses_current_context(tmp_path: Path) -> None:
