@@ -37,10 +37,16 @@ def test_execute_plan_appends_action_result_to_context(tmp_path) -> None:
     results = core.execute_plan(plan, context)
 
     assert len(results) == 1
-    assert results[0]["success"] is True
-    assert len(context.events) == 1
-    assert context.events[0]["type"] == "action.result"
-    assert context.events[0]["data"]["action"] == "get_time"
+    assert results[0]["result"]["success"] is True
+    assert results[0]["evaluation"]["success"] is True
+    assert len(context.action_results) == 1
+    assert context.action_results[0]["action"] == "get_time"
+    assert len(context.evaluations) == 1
+    assert context.evaluations[0]["success"] is True
+    assert [event["type"] for event in context.events] == [
+        "action.result",
+        "action.evaluation",
+    ]
 
 
 def test_execute_plan_skips_reason_steps(tmp_path) -> None:
