@@ -11,7 +11,10 @@ from .events import Event
 class MemoryGate:
     """Select memory-worthy events without storing transient system noise."""
 
-    salience_threshold: float = 0.75
+    # Explicit memory candidates currently score around 0.72 under the
+    # deterministic attention heuristics, while transient system events stay
+    # below this boundary. Keep the gate just above that separation point.
+    salience_threshold: float = 0.70
     rememberable_types: frozenset[str] = frozenset(
         {
             "memory.candidate",
