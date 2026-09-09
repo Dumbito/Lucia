@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from lucia.attention_adapter import AttentionAdapter
 from lucia.context import Context
 from lucia.core import LuciaCore
 from lucia.model_router import ModelRouter
@@ -55,3 +56,46 @@ def test_core_can_configure_model_router_as_cognitive_engine(tmp_path: Path) -> 
     assert result["success"] is True
     assert result["engine"] == "fake"
     assert context.cognitive_results[-1]["output"] == {"task": "Analizar contexto"}
+
+
+def test_core_attention_allows_relevant_events(tmp_path: Path) -> None:
+    engine = FakeEngine()
+    core = LuciaCore(
+        SQLiteMemoryStore(tmp_path / "lucia.db"),
+        cognitive_engine=engine,
+        attention_adapter=AttentionAdapter(),
+    )
+
+    result = core.run_agent(
+        {"type": "user_message", "data": {"content": "Analizar memoria"}},
+        goal="Construir Lucia",
+        task="Analizar memoria",
+        max_iterations=1,
+    )
+
+    assert result.context.events[-1]["type"] == "cognition.result"
+    assert result.context.cognitive_results
+    assert any(event["type"] == "attention.result" for event in result.context.events)
+
+
+def test_core_attention_filters_low_salience_events(tmp_path: Path) -> None:
+    engine = FakeEngine()
+    core = LuciaCore(
+        SQLiteMemoryStore(tmp_path / "lucia.db"),
+        cognitive_engine=engine,
+        attention_adapter=AttentionAdapter(threshold=0.9),
+    )
+
+    result = core.run_agent(
+        {"type": "system.snapshot", "data": {"content": "background noise"}},
+        goal="Construir Lucia",
+        task="Analizar memoria",
+        max_iterations=1,
+    )
+
+    assert engine.calls == 0
+    assert not result.context.cognitive_results
+    attention_event = next(
+        event for event in result.context.events if event["type"] == "attention.result"
+    )
+    assert attention_event["data"]["process"] is False
