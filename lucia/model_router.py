@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 import json
 from typing import Iterable
+from urllib import error, request
 
 from .cognitive import CognitiveEngine, CognitiveRequest, CognitiveResult
 
@@ -108,7 +109,8 @@ class ModelRouter:
             )
         return result
 
-    def _score(self, profile: ModelProfile, signals: set[str], context_tokens: int) -> int:
+    @staticmethod
+    def _score(profile: ModelProfile, signals: set[str], context_tokens: int) -> int:
         if context_tokens > profile.context_window:
             return -10_000
 
@@ -140,20 +142,30 @@ class ModelRouter:
             "code", "coding", "program", "programming", "python", "bug",
             "debug", "repository", "repo", "git", "function", "class",
             "implement", "refactor", "test", "api", "script",
+            "código", "programar", "programación", "depurar", "repositorio",
+            "función", "clase", "implementar", "refactorizar", "pruebas",
         )
         reasoning_terms = (
             "analyze", "analysis", "reason", "reasoning", "compare", "design",
             "architecture", "research", "hypothesis", "evaluate", "explain",
             "complex", "strategy", "plan",
+            "analiza", "análisis", "razona", "razonamiento", "compara", "diseña",
+            "arquitectura", "investiga", "hipótesis", "evalúa", "explica",
+            "complejo", "estrategia", "planifica",
         )
-        agent_terms = ("agent", "tool", "tools", "execute", "action", "workflow")
+        agent_terms = (
+            "agent", "tool", "tools", "execute", "action", "workflow",
+            "agente", "herramienta", "herramientas", "ejecuta", "acción", "flujo",
+        )
         long_terms = (
             "long context", "large context", "entire repository",
-            "whole repository", "many documents",
+            "whole repository", "many documents", "contexto largo", "contexto grande",
+            "repositorio completo", "muchos documentos",
         )
         fast_terms = (
             "quick", "fast", "simple", "brief", "short", "just",
-            "what time", "current time",
+            "what time", "current time", "rápido", "simple", "breve", "corto",
+            "solo", "qué hora", "hora actual",
         )
         if any(term in text for term in coding_terms):
             signals.add("coding")
@@ -228,13 +240,37 @@ def build_default_router(engines: dict[str, CognitiveEngine]) -> ModelRouter:
     return router
 
 
+def _ollama_installed_models(base_url: str, timeout: float) -> tuple[str, ...]:
+    """Return locally installed Ollama model names."""
+    endpoint = base_url.rstrip("/") + "/api/tags"
+    http_request = request.Request(endpoint, method="GET")
+    try:
+        with request.urlopen(http_request, timeout=timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Could not query Ollama models: {type(exc).__name__}: {exc}") from exc
+
+    models = data.get("models")
+    if not isinstance(models, list):
+        raise RuntimeError("Ollama response did not contain a models list")
+
+    installed: list[str] = []
+    for item in models:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if isinstance(name, str) and name.strip():
+            installed.append(name)
+    return tuple(installed)
+
+
 def build_ollama_router(
     *,
     base_url: str = "http://127.0.0.1:11434",
     timeout: float = 120.0,
     models: Iterable[str] | None = None,
 ) -> ModelRouter:
-    """Build an Ollama-backed router without downloading models."""
+    """Build an Ollama-backed router using only installed candidate models."""
     from .ollama import OllamaCognitiveEngine
 
     default_models = (
@@ -245,10 +281,18 @@ def build_ollama_router(
         "qwen3:8b",
     )
     selected_models = tuple(models or default_models)
+    installed = set(_ollama_installed_models(base_url, timeout))
+    available = tuple(model_id for model_id in selected_models if model_id in installed)
+    if not available:
+        raise RuntimeError(
+            "None of the configured Lucía models are installed in Ollama. "
+            f"Installed: {', '.join(sorted(installed)) or 'none'}"
+        )
+
     engines = {
         model_id: OllamaCognitiveEngine(
             model=model_id, base_url=base_url, timeout=timeout
         )
-        for model_id in selected_models
+        for model_id in available
     }
     return build_default_router(engines)
