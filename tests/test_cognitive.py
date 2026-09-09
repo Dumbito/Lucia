@@ -39,3 +39,15 @@ def test_build_cognitive_request_captures_working_context() -> None:
     assert request.goal == "help user"
     assert request.context["events"] == ({"type": "user.message"},)
     assert request.context["retrieved_memories"] == ({"content": "previous context"},)
+
+
+def test_cognitive_request_defaults_to_text_output() -> None:
+    request = CognitiveRequest(task="answer")
+
+    assert request.output_format is None
+
+
+def test_cognitive_request_supports_json_output() -> None:
+    request = CognitiveRequest(task="plan", output_format="json")
+
+    assert request.output_format == "json"
