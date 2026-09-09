@@ -14,12 +14,18 @@ class Context:
     current_task: str | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     retrieved_memories: list[dict[str, Any]] = field(default_factory=list)
+    cognitive_results: list[dict[str, Any]] = field(default_factory=list)
     action_results: list[dict[str, Any]] = field(default_factory=list)
     evaluations: list[dict[str, Any]] = field(default_factory=list)
 
     def add_event(self, event: dict[str, Any]) -> None:
         self.events.append(event)
         self.now = datetime.now(timezone.utc)
+
+    def add_cognitive_result(self, result: dict[str, Any]) -> None:
+        """Add a normalized cognitive result to working context."""
+        self.cognitive_results.append(result)
+        self.add_event({"type": "cognition.result", "data": result, "source": "cognitive_engine"})
 
     def add_action_result(self, result: dict[str, Any]) -> None:
         """Add a normalized action result to working context."""
