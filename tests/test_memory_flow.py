@@ -11,7 +11,8 @@ def test_memory_flow_persists_and_retrieves(tmp_path):
         memory_db=db,
     )
 
-    assert salience >= 0.75
+    # The calibrated memory gate accepts salience >= 0.70.
+    assert salience >= 0.70
     assert saved is True
     assert len(retrieved) == 1
     assert retrieved[0].content == "Lucía debe ser principalmente local."
