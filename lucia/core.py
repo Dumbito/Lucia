@@ -9,6 +9,7 @@ from .cognitive import CognitiveEngine, RuleBasedCognitiveEngine, build_cognitiv
 from .cycle import CycleResult
 from .evaluation import Evaluation, RuleBasedEvaluator
 from .memory import Memory, MemoryStore
+from .model_router import ModelRouter
 from .planner import CognitivePlanner, Plan, PlanStep, Planner, RuleBasedPlanner
 from .retrieval import MemoryRetriever
 
@@ -77,6 +78,16 @@ class LuciaCore:
         normalized = result.as_dict()
         context.add_cognitive_result(normalized)
         return normalized
+
+    def configure_model_router(self, router: ModelRouter) -> None:
+        """Use a model router as Lucía's cognitive engine."""
+        self.cognitive_engine = router
+        if isinstance(self.planner, CognitivePlanner):
+            self.planner = CognitivePlanner(
+                engine=router,
+                max_steps=self.planner.max_steps,
+                allowed_actions=self.planner.allowed_actions,
+            )
 
     def execute(self, action: Action) -> Any:
         """Execute one action through the configured executor."""
