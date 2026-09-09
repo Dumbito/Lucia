@@ -36,7 +36,7 @@ def cosine_similarity(left: Counter[str], right: Counter[str]) -> float:
     right_norm = math.sqrt(sum(value * value for value in right.values()))
     if left_norm == 0.0 or right_norm == 0.0:
         return 0.0
-    return dot / (left_norm * right_norm)
+    return min(1.0, max(-1.0, round(dot / (left_norm * right_norm), 12)))
 
 
 def text_vector(text: str) -> Counter[str]:
@@ -83,4 +83,4 @@ def dense_cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -
     right_norm = math.sqrt(sum(value * value for value in right))
     if left_norm == 0.0 or right_norm == 0.0:
         return 0.0
-    return dot / (left_norm * right_norm)
+    return min(1.0, max(-1.0, round(dot / (left_norm * right_norm), 12)))
