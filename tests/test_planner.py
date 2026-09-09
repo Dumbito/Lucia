@@ -81,6 +81,17 @@ def test_cognitive_planner_rejects_unknown_actions() -> None:
     plan = planner.plan(context)
 
     assert plan.steps[0].action == "reason"
+    assert plan.steps[0].description == "Haz algo"
+
+
+def test_cognitive_planner_preserves_terminal_empty_plan() -> None:
+    engine = FakeEngine('{"steps": []}')
+    planner = CognitivePlanner(engine)
+    context = Context(current_task="Tarea ya completada")
+
+    plan = planner.plan(context)
+
+    assert plan.steps == ()
 
 
 def test_cognitive_planner_falls_back_on_invalid_output() -> None:
