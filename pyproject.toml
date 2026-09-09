@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lucia-ai"
+version = "0.1.0"
+description = "Local-first persistent personal AI system"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+lucia = "lucia.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["lucia*"]
