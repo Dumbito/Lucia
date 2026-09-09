@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import time
 
+from .events import Event
 from .perception import LinuxPerception, SystemSnapshot
 
 
@@ -17,6 +18,20 @@ def _describe(snapshot: SystemSnapshot) -> str:
     )
 
 
+class LinuxEventSource:
+    """Stateful event source suitable for ``ProactiveLoop``."""
+
+    def __init__(self, perception: LinuxPerception | None = None) -> None:
+        self.perception = perception or LinuxPerception()
+        self.previous: SystemSnapshot | None = None
+
+    def __call__(self) -> list[Event]:
+        current = self.perception.snapshot()
+        events = self.perception.events(self.previous, current)
+        self.previous = current
+        return events
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Monitor Linux state for Lucía")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between snapshots")
@@ -25,8 +40,7 @@ def main() -> None:
     if args.interval <= 0:
         parser.error("--interval must be greater than zero")
 
-    perception = LinuxPerception()
-    previous: SystemSnapshot | None = None
+    source = LinuxEventSource()
 
     print("Lucía — Perception Monitor v0.1")
     print("Observando cambios del sistema. Ctrl+C para salir.")
@@ -34,14 +48,9 @@ def main() -> None:
 
     try:
         while True:
-            current = perception.snapshot()
-            events = perception.events(previous, current)
-
-            for event in events:
+            for event in source():
                 print(f"[{event.timestamp.astimezone().strftime('%H:%M:%S')}] {event.type}")
                 print(f"  {event.data}")
-
-            previous = current
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\nMonitor detenido.")
