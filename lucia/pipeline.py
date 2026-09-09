@@ -56,12 +56,13 @@ def main() -> None:
         memory_store,
         limit=args.memory_limit,
         embedding_provider=embedding_provider,
+        embedding_model_name=args.embedding_model if args.semantic else None,
     )
     previous: SystemSnapshot | None = None
     memories_saved = 0
 
     mode = f"dense semantic ({args.embedding_model})" if args.semantic else "lexical fallback"
-    print("Lucía — Perception → Attention → Context → Retrieval → Memory v0.5")
+    print("Lucía — Perception → Attention → Context → Retrieval → Memory v0.6")
     print("Los eventos salientes entran al contexto; la memoria se recupera según el objetivo/tarea.")
     print(f"Retrieval: {mode}")
     if args.goal or args.task:
