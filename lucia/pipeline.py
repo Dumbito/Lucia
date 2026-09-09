@@ -8,6 +8,7 @@ import time
 from .attention_adapter import AttentionAdapter
 from .context import Context
 from .events import Event
+from .embeddings import SentenceTransformerEmbedding
 from .memory import Memory
 from .memory_gate import MemoryGate
 from .perception import LinuxPerception, SystemSnapshot
@@ -19,11 +20,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run Lucía perception, attention, context and memory")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between snapshots")
     parser.add_argument("--threshold", type=float, default=0.5, help="attention threshold")
-    parser.add_argument("--memory-threshold", type=float, default=0.75, help="minimum salience for long-term memory")
+    parser.add_argument("--memory-threshold", type=float, default=0.70, help="minimum salience for long-term memory")
     parser.add_argument("--memory-db", default="data/lucia.db", help="SQLite memory database path")
     parser.add_argument("--memory-limit", type=int, default=5, help="maximum memories retrieved into context")
     parser.add_argument("--goal", default=None, help="current active goal")
     parser.add_argument("--task", default=None, help="current task")
+    parser.add_argument(
+        "--semantic",
+        action="store_true",
+        help="enable local dense semantic retrieval using sentence-transformers",
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        help="local sentence-transformers model used with --semantic",
+    )
     args = parser.parse_args()
 
     if args.interval <= 0:
@@ -40,12 +51,19 @@ def main() -> None:
     context = Context(active_goal=args.goal, current_task=args.task)
     memory_gate = MemoryGate(salience_threshold=args.memory_threshold)
     memory_store = SQLiteMemoryStore(args.memory_db)
-    memory_retriever = MemoryRetriever(memory_store, limit=args.memory_limit)
+    embedding_provider = SentenceTransformerEmbedding(args.embedding_model) if args.semantic else None
+    memory_retriever = MemoryRetriever(
+        memory_store,
+        limit=args.memory_limit,
+        embedding_provider=embedding_provider,
+    )
     previous: SystemSnapshot | None = None
     memories_saved = 0
 
-    print("Lucía — Perception → Attention → Context → Retrieval → Memory v0.4")
+    mode = f"dense semantic ({args.embedding_model})" if args.semantic else "lexical fallback"
+    print("Lucía — Perception → Attention → Context → Retrieval → Memory v0.5")
     print("Los eventos salientes entran al contexto; la memoria se recupera según el objetivo/tarea.")
+    print(f"Retrieval: {mode}")
     if args.goal or args.task:
         print(f"Objetivo: {args.goal or '—'}")
         print(f"Tarea:    {args.task or '—'}")
