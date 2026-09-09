@@ -40,6 +40,17 @@ class SQLiteMemoryStore(MemoryStore):
                 """
             )
 
+    @staticmethod
+    def _row_to_memory(row: sqlite3.Row) -> Memory:
+        return Memory(
+            content=row["content"],
+            kind=row["kind"],
+            importance=row["importance"],
+            confidence=row["confidence"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            metadata=json.loads(row["metadata"]),
+        )
+
     def save(self, memory: Memory) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -56,6 +67,16 @@ class SQLiteMemoryStore(MemoryStore):
                 ),
             )
 
+    def list_all(self) -> list[Memory]:
+        """Return all memories for model-based retrieval."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id, content, kind, importance, confidence, created_at, metadata
+                   FROM memories
+                   ORDER BY id DESC"""
+            ).fetchall()
+        return [self._row_to_memory(row) for row in rows]
+
     @staticmethod
     def _normalize(text: str) -> str:
         """Normalize text for forgiving local lexical retrieval."""
@@ -65,10 +86,8 @@ class SQLiteMemoryStore(MemoryStore):
     def search(self, query: str, limit: int = 5) -> list[Memory]:
         """Return memories matching meaningful query terms.
 
-        Retrieval is intentionally lexical for now, but it is accent-insensitive
-        and token-aware. This lets "Lucia" retrieve "Lucía" and avoids requiring
-        the entire goal string to occur verbatim in a memory. Semantic retrieval
-        can replace this implementation later without changing MemoryStore.
+        This remains useful as a cheap candidate-generation API. Semantic
+        retrieval uses ``list_all`` so lexical overlap is not a hard gate.
         """
         if limit <= 0:
             return []
@@ -81,6 +100,7 @@ class SQLiteMemoryStore(MemoryStore):
         if not normalized_terms:
             return []
 
+        matches: list[tuple[int, sqlite3.Row]] = []
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT id, content, kind, importance, confidence, created_at, metadata
@@ -88,7 +108,6 @@ class SQLiteMemoryStore(MemoryStore):
                    ORDER BY importance DESC, id DESC"""
             ).fetchall()
 
-        matches: list[tuple[int, sqlite3.Row]] = []
         for row in rows:
             normalized_content = self._normalize(row["content"])
             matched_terms = sum(term in normalized_content for term in normalized_terms)
@@ -96,14 +115,4 @@ class SQLiteMemoryStore(MemoryStore):
                 matches.append((matched_terms, row))
 
         matches.sort(key=lambda item: (item[0], item[1]["importance"], item[1]["id"]), reverse=True)
-        return [
-            Memory(
-                content=row["content"],
-                kind=row["kind"],
-                importance=row["importance"],
-                confidence=row["confidence"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                metadata=json.loads(row["metadata"]),
-            )
-            for _, row in matches[:limit]
-        ]
+        return [self._row_to_memory(row) for _, row in matches[:limit]]
