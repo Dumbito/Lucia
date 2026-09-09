@@ -87,6 +87,7 @@ class CognitivePlanner:
             ),
             goal=request.goal,
             context=request.context,
+            output_format="json",
         )
         result = self.engine.reason(request)
         context.add_cognitive_result(result.as_dict())
