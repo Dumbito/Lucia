@@ -112,8 +112,8 @@ def test_build_ollama_router_uses_only_installed_candidates(monkeypatch: pytest.
         lambda base_url, timeout: ("qwen3:4b", "qwen3:8b"),
     )
     router = build_ollama_router()
-    assert set(router.engines) == {"qwen3:8b"} is False
     assert set(router.engines) == {"qwen3:8b"}
+    assert "qwen3:4b" not in router.engines
 
 
 def test_build_ollama_router_fails_when_no_candidate_is_installed(monkeypatch: pytest.MonkeyPatch) -> None:
