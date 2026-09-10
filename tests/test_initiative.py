@@ -53,6 +53,20 @@ def test_initiative_penalizes_interruption_cost():
     assert high_cost.score < low_cost.score
 
 
+def test_initiative_score_does_not_exceed_one_without_penalty():
+    engine = InitiativeEngine()
+    decision = engine.decide(
+        salience=1.0,
+        novelty=1.0,
+        relevance=1.0,
+        urgency=1.0,
+        goal_alignment=1.0,
+        uncertainty=1.0,
+    )
+
+    assert decision.score == pytest.approx(1.0)
+
+
 def test_initiative_rejects_invalid_inputs():
     engine = InitiativeEngine()
 
