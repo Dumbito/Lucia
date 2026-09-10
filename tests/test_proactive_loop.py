@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from lucia.core import LuciaCore
 from lucia.events import Event
 from lucia.initiative import InitiativeEngine
@@ -32,6 +34,15 @@ def test_tick_processes_all_source_events():
     assert core.proactive_calls[0][1:] == ("g", "t", 2)
 
 
+def test_cooldown_skips_duplicate_events():
+    core = StubCore()
+    loop = ProactiveLoop(core, lambda: [Event("tick", {"x": 1})], cooldown=60.0)
+
+    assert loop.tick() == ["result"]
+    assert loop.tick() == []
+    assert len(core.proactive_calls) == 1
+
+
 def test_run_can_be_bounded_without_sleeping_after_last_tick():
     core = StubCore()
     loop = ProactiveLoop(core, lambda: [Event("tick", {})], interval=0.001)
@@ -40,6 +51,23 @@ def test_run_can_be_bounded_without_sleeping_after_last_tick():
 
     assert len(core.proactive_calls) == 2
     assert loop.running is False
+
+
+def test_run_backoff_increases_idle_interval():
+    core = StubCore()
+    source = iter([[], [], []])
+    loop = ProactiveLoop(
+        core,
+        lambda: next(source),
+        interval=1.0,
+        max_interval=4.0,
+        idle_backoff=2.0,
+    )
+
+    with patch("lucia.proactive_loop.time.sleep") as sleep:
+        loop.run(max_ticks=3)
+
+    assert [call.args[0] for call in sleep.call_args_list] == [2.0, 4.0]
 
 
 def test_stop_sets_running_false():
@@ -66,6 +94,24 @@ def test_invalid_configuration_is_rejected():
         assert False
     except ValueError as exc:
         assert "max_iterations" in str(exc)
+
+    try:
+        ProactiveLoop(core, lambda: [], cooldown=-1)
+        assert False
+    except ValueError as exc:
+        assert "cooldown" in str(exc)
+
+    try:
+        ProactiveLoop(core, lambda: [], interval=2, max_interval=1)
+        assert False
+    except ValueError as exc:
+        assert "max_interval" in str(exc)
+
+    try:
+        ProactiveLoop(core, lambda: [], idle_backoff=0.5)
+        assert False
+    except ValueError as exc:
+        assert "idle_backoff" in str(exc)
 
     loop = ProactiveLoop(core, lambda: [])
     try:
