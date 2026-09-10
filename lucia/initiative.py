@@ -21,20 +21,21 @@ class InitiativeDecision:
 
 @dataclass(slots=True)
 class InitiativeEngine:
-    """Small interpretable heuristic for proactive behavior.
+    """Interpretable heuristic for proactive behavior.
 
-    The initial policy deliberately avoids LLM-based autonomy. It combines
-    salience with urgency, relevance, goal alignment and uncertainty while
-    penalizing repeated events. Future versions can learn or replace this
-    policy without changing the Core contract.
+    The weights form a true convex combination: without an interruption-cost
+    penalty, the score stays in the same 0..1 scale as its inputs. This keeps
+    the threshold meaningful and prevents accidental saturation.
     """
 
     threshold: float = 0.65
-    novelty_weight: float = 0.15
-    relevance_weight: float = 0.30
-    urgency_weight: float = 0.25
-    goal_alignment_weight: float = 0.20
-    uncertainty_weight: float = 0.10
+    salience_weight: float = 0.30 / 1.30
+    novelty_weight: float = 0.15 / 1.30
+    relevance_weight: float = 0.30 / 1.30
+    urgency_weight: float = 0.25 / 1.30
+    goal_alignment_weight: float = 0.20 / 1.30
+    uncertainty_weight: float = 0.10 / 1.30
+    interruption_cost_weight: float = 0.15
 
     def decide(
         self,
@@ -62,13 +63,13 @@ class InitiativeEngine:
             raise ValueError("threshold must be between 0 and 1")
 
         score = (
-            0.30 * salience
+            self.salience_weight * salience
             + self.novelty_weight * novelty
             + self.relevance_weight * relevance
             + self.urgency_weight * urgency
             + self.goal_alignment_weight * goal_alignment
             + self.uncertainty_weight * uncertainty
-            - 0.15 * interruption_cost
+            - self.interruption_cost_weight * interruption_cost
         )
         score = max(0.0, min(1.0, score))
 
