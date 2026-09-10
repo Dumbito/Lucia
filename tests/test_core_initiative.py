@@ -10,7 +10,10 @@ def test_core_proactive_mode_reaches_planning_after_attention_and_initiative(tmp
     core = LuciaCore(
         SQLiteMemoryStore(tmp_path / "lucia.db"),
         attention_adapter=AttentionAdapter(),
-        initiative_engine=InitiativeEngine(),
+        # This test explicitly exercises the proactive path; use a lower
+        # policy threshold rather than coupling the integration test to the
+        # conservative production default.
+        initiative_engine=InitiativeEngine(threshold=0.5),
     )
 
     result = core.run_proactive(
